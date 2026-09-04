@@ -1012,9 +1012,11 @@ function ytmViewNavigated() {
     if (url.startsWith("https://music.youtube.com/")) {
       lastUrl = url;
       const parsedUrl = new URL(url);
-      // Back is only available when there is real history to go back to
+      const onHome = parsedUrl.pathname === "/" && parsedUrl.search === "";
+      // While on the home page the back button must not work (nothing behind),
+      // but the forward button keeps working when history exists ahead
       const navigationState = {
-        canGoBack: ytmView.webContents.navigationHistory.canGoBack(),
+        canGoBack: !onHome && ytmView.webContents.navigationHistory.canGoBack(),
         canGoForward: ytmView.webContents.navigationHistory.canGoForward()
       };
       ytmView.webContents.send("ytmView:navigationStateChanged", navigationState);
@@ -1302,53 +1304,6 @@ const createYTMView = (): void => {
     if (!memoryStore.get("ytmViewLoadingError")) {
       memoryStore.set("ytmViewLoadingStatus", "Loaded YouTube Music");
     }
-  });
-
-  // PERF: Oynatma zaten aktifse gereksiz JS enjeksiyonu yapılmaz; ayrıca
-  // birikmiş bekleyen denemeler iptal edilir (espa navigation başına bir kez).
-  let pendingAutoplayTimers: NodeJS.Timeout[] = [];
-
-  const clearPendingAutoplay = () => {
-    for (const timer of pendingAutoplayTimers) clearTimeout(timer);
-    pendingAutoplayTimers = [];
-  };
-
-  const tryAutoplay = () => {
-    if (ytmView && !ytmView.webContents.isDestroyed()) {
-      ytmView.webContents.executeJavaScript(`
-        (function() {
-          const bar = document.querySelector("ytmusic-app-layout>ytmusic-player-bar");
-          if (bar && bar.playerApi) {
-            if (!bar.playing) {
-              bar.playerApi.playVideo();
-            }
-          }
-        })()
-      `).catch(() => {});
-    }
-  };
-
-  const scheduleAutoplay = (delay: number) => {
-    // Şarkı zaten çalıyorsa hiç kontrol etme
-    const currentState = playerStateStore.getState();
-    if (currentState.trackState === VideoState.Playing) return;
-
-    clearPendingAutoplay();
-    pendingAutoplayTimers.push(setTimeout(tryAutoplay, delay));
-  };
-
-  ytmView.webContents.on("did-finish-load", () => {
-    scheduleAutoplay(2000);
-    pendingAutoplayTimers.push(setTimeout(tryAutoplay, 7000));
-    pendingAutoplayTimers.push(setTimeout(tryAutoplay, 12000));
-  });
-
-  ytmView.webContents.on("did-navigate", () => {
-    scheduleAutoplay(5000);
-  });
-
-  ytmView.webContents.on("did-navigate-in-page", () => {
-    scheduleAutoplay(3000);
   });
 
   ytmView.webContents.on("did-fail-load", (_event, errorCode, errorDescription, _validatedURL, isMainFrame) => {
