@@ -138,6 +138,36 @@ function createNavigationMenuArrows() {
     const navBar = searchBar.parentNode;
     navBar.insertBefore(historyForwardElement, searchBar);
     navBar.insertBefore(historyBackElement, historyForwardElement);
+
+    // The search box takes over the whole nav bar when focused or when a search
+    // page is open — in that state the arrows would overlap the search input,
+    // so hide them until the search is closed
+    const style = document.createElement("style");
+    style.textContent = `
+      .ytmd-history-arrow-hidden {
+        display: none !important;
+      }
+    `;
+    document.head.appendChild(style);
+
+    const updateArrowVisibility = () => {
+      const onSearchPage = location.pathname === "/results";
+      const searchActive = searchBar.matches(":focus-within");
+      const hide = onSearchPage || searchActive;
+      historyBackElement.classList.toggle("ytmd-history-arrow-hidden", hide);
+      historyForwardElement.classList.toggle("ytmd-history-arrow-hidden", hide);
+    };
+
+    document.addEventListener("focusin", event => {
+      if (searchBar.contains(event.target)) updateArrowVisibility();
+    });
+    document.addEventListener("focusout", event => {
+      if (searchBar.contains(event.target)) updateArrowVisibility();
+    });
+    // Re-evaluate when navigating to/from the search page
+    document.addEventListener("yt-navigate-finish", updateArrowVisibility);
+    // Initial state
+    setTimeout(updateArrowVisibility, 250);
   } else {
     historyForwardElement.classList.add("pivotbar");
     historyBackElement.classList.add("pivotbar");
