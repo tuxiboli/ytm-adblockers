@@ -166,6 +166,8 @@ function createNavigationMenuArrows() {
     });
     // Re-evaluate when navigating to/from the search page
     document.addEventListener("yt-navigate-finish", updateArrowVisibility);
+    // Fallback: re-evaluate periodically, in case navigation events don't fire
+    setInterval(updateArrowVisibility, 500);
     // Initial state
     setTimeout(updateArrowVisibility, 250);
   } else {
