@@ -1,5 +1,5 @@
 # YTM Adblockers
-### YouTube Music Desktop App with Ad-Blocking & SponsorBlock
+### YouTube Music Desktop App with Ad-Blocking
 
 ![YTM Adblockers](.github/images/readme_main_app.png)
 
