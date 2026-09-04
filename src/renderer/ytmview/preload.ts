@@ -95,102 +95,10 @@ function createMaterialSymbolsLink() {
 }
 
 async function createNavigationMenuArrows() {
-  // Back/forward buttons next to the YT Music logo. They are always visible
-  // (even while the search box is focused/expanded) so they keep their fixed
-  // place. Clicks go through the reliable Electron IPC navigation API.
-
-  const historyBackElement = document.createElement("span");
-  historyBackElement.classList.add("material-symbols-outlined", "ytmd-history-back", "disabled");
-  historyBackElement.innerText = "arrow_back";
-  historyBackElement.title = "Geri";
-
-  historyBackElement.addEventListener("click", function () {
-    if (!historyBackElement.classList.contains("disabled")) {
-      ipcRenderer.send("ytmView:goBack");
-    }
-  });
-
-  const historyForwardElement = document.createElement("span");
-  historyForwardElement.classList.add("material-symbols-outlined", "ytmd-history-forward", "disabled");
-  historyForwardElement.innerText = "arrow_forward";
-  historyForwardElement.title = "İleri";
-
-  historyForwardElement.addEventListener("click", function () {
-    if (!historyForwardElement.classList.contains("disabled")) {
-      ipcRenderer.send("ytmView:goForward");
-    }
-  });
-
-  ipcRenderer.on("ytmView:navigationStateChanged", (event, state) => {
-    if (state.canGoBack) {
-      historyBackElement.classList.remove("disabled");
-    } else {
-      historyBackElement.classList.add("disabled");
-    }
-
-    if (state.canGoForward) {
-      historyForwardElement.classList.remove("disabled");
-    } else {
-      historyForwardElement.classList.add("disabled");
-    }
-  });
-
-  const searchBar = document.querySelector("ytmusic-search-box");
-  if (!searchBar) return;
-
-  // Inject the buttons and defer anchoring repeatedly, because the new YTM UI
-  // re-renders the nav bar during (re)loads — we re-attach until it sticks
-  const anchorArrows = () => {
-    if (!document.contains(historyBackElement) || !document.contains(historyForwardElement)) {
-      // Find the nav bar container that holds the YT Music logo and the search box
-      const target = document.querySelector("ytmusic-search-box");
-      if (!target || !target.parentNode) return false;
-      const navBar = target.parentNode;
-      // Insert before the search box; the fixed positioning anchors them next
-      // to the YT Music logo and they stay visible at all times
-      navBar.insertBefore(historyForwardElement, target);
-      navBar.insertBefore(historyBackElement, historyForwardElement);
-    }
-    return true;
-  };
-
-  // Also hide the arrows visually over the search bar via CSS but keep them in
-  // the DOM anchored to the left of the search input, always visible: the
-  // buttons stay in place even as the search box takes focus
-  const style = document.createElement("style");
-  style.textContent = `
-    .ytmd-history-back, .ytmd-history-forward {
-      position: relative;
-      z-index: 220;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      width: 36px;
-      height: 36px;
-      border-radius: 50%;
-      cursor: pointer;
-      opacity: 0.85;
-      margin: 0 2px;
-      flex-shrink: 0;
-    }
-    .ytmd-history-back:hover, .ytmd-history-forward:hover {
-      background: rgba(255,255,255,0.1);
-    }
-    .ytmd-history-back.disabled, .ytmd-history-forward.disabled {
-      opacity: 0.3;
-      cursor: default;
-      pointer-events: auto;
-    }
-  `;
-  document.head.appendChild(style);
-
-  anchorArrows();
-  // Re-anchor in case YTM re-renders the header
-  const anchorInterval = setInterval(() => {
-    if (!anchorArrows() || !document.contains(historyBackElement)) {
-      // keep trying
-    }
-  }, 2000);
+  // Custom history arrows are no longer injected into the YTM page: in the new
+  // YTM UI the search box takes over the whole nav bar when focused so the
+  // arrows overlapped the search input.Navigation is instead handled from the
+  // main window title bar buttons (ytmView:goBack / ytmView:goForward).
 }
 
 async function createKeyboardNavigation() {

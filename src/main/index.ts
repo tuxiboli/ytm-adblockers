@@ -2026,9 +2026,9 @@ app.on("ready", async () => {
 
   ipcMain.on("ytmView:goBack", event => {
     if (ytmView) {
-      // Allowed from both the main window and the injected arrows in the YTM view
-      if (event.sender !== mainWindow.webContents && event.sender !== ytmView.webContents) return;
+      if (event.sender !== mainWindow.webContents) return;
 
+      // Back only works when there is real history to go back to — no home fallback
       if (ytmView.webContents.navigationHistory.canGoBack()) {
         ytmView.webContents.navigationHistory.goBack();
       }
@@ -2037,7 +2037,7 @@ app.on("ready", async () => {
 
   ipcMain.on("ytmView:goForward", event => {
     if (ytmView) {
-      if (event.sender !== mainWindow.webContents && event.sender !== ytmView.webContents) return;
+      if (event.sender !== mainWindow.webContents) return;
 
       if (ytmView.webContents.navigationHistory.canGoForward()) {
         ytmView.webContents.navigationHistory.goForward();
