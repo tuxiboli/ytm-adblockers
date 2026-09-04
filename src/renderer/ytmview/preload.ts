@@ -151,7 +151,7 @@ function createNavigationMenuArrows() {
     document.head.appendChild(style);
 
     const updateArrowVisibility = () => {
-      const onSearchPage = location.pathname === "/results";
+      const onSearchPage = location.pathname === "/results" || location.pathname === "/search" || location.pathname.startsWith("/search");
       const searchActive = searchBar.matches(":focus-within");
       const hide = onSearchPage || searchActive;
       historyBackElement.classList.toggle("ytmd-history-arrow-hidden", hide);
