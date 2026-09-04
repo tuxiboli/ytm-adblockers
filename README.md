@@ -19,12 +19,6 @@ Download the latest release from the [Releases](https://github.com/elsenqedimli1
 # ✨ Features
 - 🎵 Listen to YouTube Music in a dedicated desktop application
 - 🛡️ **Built-in ad blocking** — updated URL filters
-- ⏭️ **SponsorBlock** integration with per-category skip settings:
-  - Automatic skipping
-  - Ask at the beginning of the video
-  - Manual skip (tiny button appears during the segment)
-  - Disabled
-  - Categories: Sponsor, Self-promotion, Interaction reminder, Interlude / Intro animation, End screen / Credits, Preview, Non-Music section
 - Continue where you left off
 - Custom CSS support
 - Discord Rich Presence
