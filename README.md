@@ -50,11 +50,6 @@ To build for your platform run `yarn make`. Building for Windows requires the el
 
 To package without making installers just run `yarn package`.
 
-## Linux
-Building the project on Linux only requires you to install:
-- For Debian based distros like Ubuntu: `fakeroot` and `dpkg`
-- For RedHat based distros like Fedora: `rpm` or `rpm-build`
-
 ## License
 
 This project is licensed under the [GNU GPL-3.0](LICENSE), inherited from the original ytmdesktop project.
