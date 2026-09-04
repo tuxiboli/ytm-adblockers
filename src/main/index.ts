@@ -381,6 +381,8 @@ const store = new Conf<StoreSchema>({
       lastUrl: "https://music.youtube.com/",
       lastPlaylistId: "",
       lastVideoId: "",
+      navHistory: [],
+      navIndex: -1,
       windowBounds: null,
       windowMaximized: false,
       miniPlayerBounds: null
@@ -566,10 +568,43 @@ if (process.platform === "win32") {
   app.commandLine.appendSwitch("disable-features", "CalculateNativeWinOcclusion");
 }
 
+// Own navigation history stack — survives application restarts because it is
+// kept in the store. Back/forward buttons walk this stack by loading URLs,
+// independent from the webContents history which resets on restart.
+let navHistory: string[] = store.get("state.navHistory") ?? [];
+let navIndex = store.get("state.navIndex") ?? -1;
+
+const NAV_HISTORY_LIMIT = 50;
+
+function persistNavigation(): void {
+  store.set("state.navHistory", navHistory);
+  store.set("state.navIndex", navIndex);
+}
+
+function pushNavigation(url: string): void {
+  const parsed = new URL(url);
+  if (parsed.hostname !== "music.youtube.com") return;
+  if (navHistory[navIndex] === url) return;
+
+  // If navigating to the entry right after the current index, that is a forward move
+  if (navIndex + 1 < navHistory.length && navHistory[navIndex + 1] === url) {
+    navIndex++;
+    persistNavigation();
+    return;
+  }
+
+  // Otherwise push a new entry, dropping any "forward" entries
+  navHistory = [...navHistory.slice(0, navIndex + 1), url].slice(-NAV_HISTORY_LIMIT);
+  navIndex = navHistory.length - 1;
+  persistNavigation();
+}
+
 function saveState() {
   store.set("state.lastUrl", lastUrl);
   store.set("state.lastVideoId", lastVideoId);
   store.set("state.lastPlaylistId", lastPlaylistId);
+  store.set("state.navHistory", navHistory);
+  store.set("state.navIndex", navIndex);
 }
 
 // Automatic background state saving every 5 minutes
@@ -1011,13 +1046,14 @@ function ytmViewNavigated() {
     const url = ytmView.webContents.getURL();
     if (url.startsWith("https://music.youtube.com/")) {
       lastUrl = url;
-      const url2 = new URL(url);
-      // On the home page there is nothing to navigate back to, so the back
-      // button reports as disabled there
-      const homepageDisable = url2.pathname === "/" && url2.search === "";
+      // Track the page in the own (store-persisted) navigation history
+      pushNavigation(url);
+      // Back/forward availability is based on the persisted stack so it also
+      // works right after an application restart, when the webContents history
+      // has been reset
       const navigationState = {
-        canGoBack: !homepageDisable && ytmView.webContents.navigationHistory.canGoBack(),
-        canGoForward: ytmView.webContents.navigationHistory.canGoForward()
+        canGoBack: navIndex > 0,
+        canGoForward: navIndex < navHistory.length - 1
       };
       ytmView.webContents.send("ytmView:navigationStateChanged", navigationState);
       // Let the main window title bar keep its back/forward buttons in sync
@@ -2075,13 +2111,32 @@ app.on("ready", async () => {
     if (ytmView) {
       if (event.sender !== mainWindow.webContents) return;
 
-      if (ytmView.webContents.navigationHistory.canGoBack()) {
-        const currentUrl = new URL(ytmView.webContents.getURL());
-        if (currentUrl.hostname.endsWith("music.youtube.com") && currentUrl.pathname === "/" && currentUrl.search === "") {
-          // No-op on the home page
-          return;
+      if (navIndex > 0) {
+        if (navHistory[navIndex - 1] === ytmView.webContents.getURL()) {
+          // The previous stack entry is the webContents' own previous entry —
+          // use the built-in history so in-page state stays intact
+          ytmView.webContents.navigationHistory.goBack();
+        } else {
+          navIndex--;
+          persistNavigation();
+          ytmView.webContents.loadURL(navHistory[navIndex]);
         }
-        ytmView.webContents.navigationHistory.goBack();
+      }
+    }
+  });
+
+  ipcMain.on("ytmView:goForward", event => {
+    if (ytmView) {
+      if (event.sender !== mainWindow.webContents) return;
+
+      if (navIndex < navHistory.length - 1) {
+        if (navHistory[navIndex + 1] === ytmView.webContents.getURL()) {
+          ytmView.webContents.navigationHistory.goForward();
+        } else {
+          navIndex++;
+          persistNavigation();
+          ytmView.webContents.loadURL(navHistory[navIndex]);
+        }
       }
     }
   });

@@ -49,6 +49,8 @@ export type StoreSchema = {
     lastUrl: string;
     lastPlaylistId: string;
     lastVideoId: string;
+    navHistory: string[];
+    navIndex: number;
     windowBounds: Electron.Rectangle | null;
     windowMaximized: boolean;
     miniPlayerBounds: Electron.Rectangle | null;
