@@ -1012,12 +1012,9 @@ function ytmViewNavigated() {
     if (url.startsWith("https://music.youtube.com/")) {
       lastUrl = url;
       const parsedUrl = new URL(url);
-      const onHome = parsedUrl.pathname === "/" && parsedUrl.search === "";
-      // The back button stays available outside the home page even when the
-      // webContents has no history (e.g. right after an application restart
-      // that resumed on a song) — in that case pressing it returns home
+      // Back is only available when there is real history to go back to
       const navigationState = {
-        canGoBack: ytmView.webContents.navigationHistory.canGoBack() || !onHome,
+        canGoBack: ytmView.webContents.navigationHistory.canGoBack(),
         canGoForward: ytmView.webContents.navigationHistory.canGoForward()
       };
       ytmView.webContents.send("ytmView:navigationStateChanged", navigationState);
@@ -2076,14 +2073,9 @@ app.on("ready", async () => {
     if (ytmView) {
       if (event.sender !== mainWindow.webContents) return;
 
+      // Back only works when there is real history to go back to — no home fallback
       if (ytmView.webContents.navigationHistory.canGoBack()) {
         ytmView.webContents.navigationHistory.goBack();
-      } else {
-        // No webContents history (e.g. right after an application restart that
-        // resumed on a song) — pressing back returns to the home page
-        const currentUrl = new URL(ytmView.webContents.getURL());
-        if (currentUrl.pathname === "/" && currentUrl.search === "") return;
-        ytmView.webContents.loadURL("https://music.youtube.com/");
       }
     }
   });
