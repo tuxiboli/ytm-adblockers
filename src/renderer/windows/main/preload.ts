@@ -20,6 +20,10 @@ contextBridge.exposeInMainWorld("ytmd", {
   openMiniPlayer: () => ipcRenderer.send("miniPlayer:open"),
   switchFocus: (context: string) => ipcRenderer.send("ytmView:switchFocus", context),
   ytmViewNavigateDefault: () => ipcRenderer.send("ytmView:navigateDefault"),
+  ytmViewGoBack: () => ipcRenderer.send("ytmView:goBack"),
+  ytmViewGoForward: () => ipcRenderer.send("ytmView:goForward"),
+  handleYtmViewNavigationChanged: (callback: (event: Electron.IpcRendererEvent, state: { canGoBack: boolean; canGoForward: boolean }) => void) =>
+    ipcRenderer.on("ytmView:navigationStateChanged", callback),
   ytmViewRecreate: () => ipcRenderer.send("ytmView:recreate"),
   memoryStore: {
     set: (key: string, value: unknown) => memoryStore.set(key, value),

@@ -1011,10 +1011,15 @@ function ytmViewNavigated() {
     const url = ytmView.webContents.getURL();
     if (url.startsWith("https://music.youtube.com/")) {
       lastUrl = url;
-      ytmView.webContents.send("ytmView:navigationStateChanged", {
+      const navigationState = {
         canGoBack: ytmView.webContents.navigationHistory.canGoBack(),
         canGoForward: ytmView.webContents.navigationHistory.canGoForward()
-      });
+      };
+      ytmView.webContents.send("ytmView:navigationStateChanged", navigationState);
+      // Let the main window title bar keep its back/forward buttons in sync
+      if (mainWindow !== null && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send("ytmView:navigationStateChanged", navigationState);
+      }
     }
   }
 }
@@ -2059,6 +2064,26 @@ app.on("ready", async () => {
       if (event.sender !== mainWindow.webContents) return;
 
       ytmView.webContents.loadURL("https://music.youtube.com/");
+    }
+  });
+
+  ipcMain.on("ytmView:goBack", event => {
+    if (ytmView) {
+      if (event.sender !== mainWindow.webContents) return;
+
+      if (ytmView.webContents.navigationHistory.canGoBack()) {
+        ytmView.webContents.navigationHistory.goBack();
+      }
+    }
+  });
+
+  ipcMain.on("ytmView:goForward", event => {
+    if (ytmView) {
+      if (event.sender !== mainWindow.webContents) return;
+
+      if (ytmView.webContents.navigationHistory.canGoForward()) {
+        ytmView.webContents.navigationHistory.goForward();
+      }
     }
   });
 

@@ -15,6 +15,7 @@ const props = defineProps({
     default: null
   },
   hasHomeButton: Boolean,
+  hasBackForwardButtons: Boolean,
   hasSettingsButton: Boolean,
   hasMinimizeButton: Boolean,
   hasMaximizeButton: Boolean,
@@ -33,6 +34,21 @@ const closeWindow = window.ytmd.closeWindow;
 const openSettingsWindow = window.ytmd.openSettingsWindow;
 const navigateToDefault = window.ytmd.ytmViewNavigateDefault;
 const openMiniPlayer = window.ytmd.openMiniPlayer;
+const ytmViewGoBack = (window.ytmd as any).ytmViewGoBack;
+const ytmViewGoForward = (window.ytmd as any).ytmViewGoForward;
+const handleYtmViewNavigationChanged = (window.ytmd as any).handleYtmViewNavigationChanged;
+const canGoBack = ref(false);
+const canGoForward = ref(false);
+
+if (props.isMainWindow) {
+  // Listen for navigation state if the API exists
+  if (handleYtmViewNavigationChanged) {
+    handleYtmViewNavigationChanged(function (_event, state) {
+      canGoBack.value = state.canGoBack;
+      canGoForward.value = state.canGoForward;
+    });
+  }
+}
 
 const wcoVisible = ref(window.navigator.windowControlsOverlay.visible);
 const windowMaximized = ref(false);
@@ -95,7 +111,15 @@ if (props.isMainWindow) {
       </div>
       <div class="app-buttons">
         <slot name="app-buttons"></slot>
-        <button v-if="hasHomeButton" class="app-button" tabindex="2" @click="navigateToDefault">
+        <template v-if="hasBackForwardButtons">
+          <button class="app-button" :class="{ disabled: !canGoBack }" tabindex="1" title="Back" @click="ytmViewGoBack && ytmViewGoBack()">
+            <span class="material-symbols-outlined">arrow_back</span>
+          </button>
+          <button class="app-button" :class="{ disabled: !canGoForward }" tabindex="2" title="Forward" @click="ytmViewGoForward && ytmViewGoForward()">
+            <span class="material-symbols-outlined">arrow_forward</span>
+          </button>
+        </template>
+        <button v-if="hasHomeButton" class="app-button" tabindex="3" @click="navigateToDefault">
           <span class="material-symbols-outlined">home</span>
         </button>
         <button v-if="hasSettingsButton" class="app-button" tabindex="3" @click="openSettingsWindow">
@@ -210,6 +234,12 @@ if (props.isMainWindow) {
 
 .app-button:hover {
   background-color: #222222;
+}
+
+.app-button.disabled {
+  opacity: 0.3;
+  pointer-events: none;
+  cursor: default;
 }
 
 .app-button > .material-symbols-outlined {

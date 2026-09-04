@@ -94,58 +94,14 @@ function createMaterialSymbolsLink() {
   return link;
 }
 
-function createNavigationMenuArrows() {
-  // Go back in history
-  const historyBackElement = document.createElement("span");
-  historyBackElement.classList.add("material-symbols-outlined", "ytmd-history-back", "disabled");
-  historyBackElement.innerText = "west";
-
-  historyBackElement.addEventListener("click", function () {
-    if (!historyBackElement.classList.contains("disabled")) {
-      history.back();
-    }
-  });
-
-  // Go forward in history
-  const historyForwardElement = document.createElement("span");
-  historyForwardElement.classList.add("material-symbols-outlined", "ytmd-history-forward", "disabled");
-  historyForwardElement.innerText = "east";
-
-  historyForwardElement.addEventListener("click", function () {
-    if (!historyForwardElement.classList.contains("disabled")) {
-      history.forward();
-    }
-  });
-
-  ipcRenderer.on("ytmView:navigationStateChanged", (event, state) => {
-    if (state.canGoBack) {
-      historyBackElement.classList.remove("disabled");
-    } else {
-      historyBackElement.classList.add("disabled");
-    }
-
-    if (state.canGoForward) {
-      historyForwardElement.classList.remove("disabled");
-    } else {
-      historyForwardElement.classList.add("disabled");
-    }
-  });
-
-  const pivotBar = document.querySelector("ytmusic-pivot-bar-renderer");
-  if (!pivotBar) {
-    // New YTM UI
-    // History arrows are not injected in the new YTM UI: the search box takes
-    // over the whole nav bar when focused so the arrows end up overlapping the
-    // search input, and their custom placement does not work reliably.
-  } else {
-    historyForwardElement.classList.add("pivotbar");
-    historyBackElement.classList.add("pivotbar");
-    pivotBar.prepend(historyForwardElement);
-    pivotBar.prepend(historyBackElement);
-  }
+async function createNavigationMenuArrows() {
+  // Custom history arrows are no longer injected into the YTM page: in the new
+  // YTM UI the search box takes over the whole nav bar when focused so the
+  // arrows overlapped the search input.Navigation is instead handled from the
+  // main window title bar buttons (ytmView:goBack / ytmView:goForward).
 }
 
-function createKeyboardNavigation() {
+async function createKeyboardNavigation() {
   const keyboardNavigation = document.createElement("div");
   keyboardNavigation.tabIndex = 32767;
   keyboardNavigation.onfocus = () => {

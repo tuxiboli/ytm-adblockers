@@ -27,7 +27,7 @@ onMounted(() => {
 <template>
   <div ref="keyboardFocusZero" tabindex="0"></div>
   <Suspense>
-    <TitleBar is-main-window has-home-button has-settings-button has-minimize-button has-maximize-button title="YTM Adblockers" :icon-file="logo" />
+    <TitleBar is-main-window has-back-forward-buttons has-home-button has-settings-button has-minimize-button has-maximize-button title="YTM Adblockers" :icon-file="logo" />
   </Suspense>
   <Suspense>
     <YTMViewLoading />
