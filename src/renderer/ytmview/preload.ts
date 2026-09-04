@@ -134,42 +134,9 @@ function createNavigationMenuArrows() {
   const pivotBar = document.querySelector("ytmusic-pivot-bar-renderer");
   if (!pivotBar) {
     // New YTM UI
-    const searchBar = document.querySelector("ytmusic-search-box");
-    const navBar = searchBar.parentNode;
-    navBar.insertBefore(historyForwardElement, searchBar);
-    navBar.insertBefore(historyBackElement, historyForwardElement);
-
-    // The search box takes over the whole nav bar when focused or when a search
-    // page is open — in that state the arrows would overlap the search input,
-    // so hide them until the search is closed
-    const style = document.createElement("style");
-    style.textContent = `
-      .ytmd-history-arrow-hidden {
-        display: none !important;
-      }
-    `;
-    document.head.appendChild(style);
-
-    const updateArrowVisibility = () => {
-      const onSearchPage = location.pathname === "/results" || location.pathname === "/search" || location.pathname.startsWith("/search");
-      const searchActive = searchBar.matches(":focus-within");
-      const hide = onSearchPage || searchActive;
-      historyBackElement.classList.toggle("ytmd-history-arrow-hidden", hide);
-      historyForwardElement.classList.toggle("ytmd-history-arrow-hidden", hide);
-    };
-
-    document.addEventListener("focusin", event => {
-      if (searchBar.contains(event.target)) updateArrowVisibility();
-    });
-    document.addEventListener("focusout", event => {
-      if (searchBar.contains(event.target)) updateArrowVisibility();
-    });
-    // Re-evaluate when navigating to/from the search page
-    document.addEventListener("yt-navigate-finish", updateArrowVisibility);
-    // Fallback: re-evaluate periodically, in case navigation events don't fire
-    setInterval(updateArrowVisibility, 500);
-    // Initial state
-    setTimeout(updateArrowVisibility, 250);
+    // History arrows are not injected in the new YTM UI: the search box takes
+    // over the whole nav bar when focused so the arrows end up overlapping the
+    // search input, and their custom placement does not work reliably.
   } else {
     historyForwardElement.classList.add("pivotbar");
     historyBackElement.classList.add("pivotbar");
