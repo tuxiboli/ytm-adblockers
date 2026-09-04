@@ -1123,7 +1123,11 @@ function ytmViewNavigated() {
       // works right after an application restart, when the webContents history
       // has been reset
       const navigationState = {
-        canGoBack: navIndex > 0,
+        // The back button should always be available outside of the home page:
+        // when there is no history entry to go back to (e.g. right after an
+        // application restart that resumed on a song), pressing it returns to
+        // the home page.
+        canGoBack: navIndex > 0 || !(new URL(url).pathname === "/" && new URL(url).search === ""),
         canGoForward: navIndex < navHistory.length - 1
       };
       ytmView.webContents.send("ytmView:navigationStateChanged", navigationState);
@@ -2182,7 +2186,21 @@ app.on("ready", async () => {
     if (ytmView) {
       if (event.sender !== mainWindow.webContents) return;
 
-      if (navIndex > 0) navigateToStackEntry(-1);
+      if (navIndex > 0) {
+        navigateToStackEntry(-1);
+      } else {
+        // No history behind (e.g. right after an application restart that
+        // resumed on a song) — go back to the home page instead, so "back"
+        // remains a way to return home
+        const currentUrl = new URL(ytmView.webContents.getURL());
+        if (currentUrl.pathname === "/" && currentUrl.search === "") return;
+        suppressNavTracking = true;
+        ytmView.webContents.loadURL("https://music.youtube.com/").finally(() => {
+          setTimeout(() => {
+            suppressNavTracking = false;
+          }, 1000);
+        });
+      }
     }
   });
 
