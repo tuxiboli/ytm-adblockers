@@ -95,10 +95,106 @@ function createMaterialSymbolsLink() {
 }
 
 async function createNavigationMenuArrows() {
-  // Custom history arrows are no longer injected into the YTM page: in the new
-  // YTM UI the search box takes over the whole nav bar when focused so the
-  // arrows overlapped the search input.Navigation is instead handled from the
-  // main window title bar buttons (ytmView:goBack / ytmView:goForward).
+  // Go back in history
+  const historyBackElement = document.createElement("span");
+  historyBackElement.classList.add("material-symbols-outlined", "ytmd-history-back", "disabled");
+  historyBackElement.innerText = "arrow_back";
+
+  historyBackElement.addEventListener("click", function () {
+    if (!historyBackElement.classList.contains("disabled")) {
+      // Let the main process handle navigation — this is the same reliable
+      // Electron navigation API used by the title bar buttons
+      ipcRenderer.send("ytmView:goBack");
+    }
+  });
+
+  // Go forward in history
+  const historyForwardElement = document.createElement("span");
+  historyForwardElement.classList.add("material-symbols-outlined", "ytmd-history-forward", "disabled");
+  historyForwardElement.innerText = "arrow_forward";
+
+  historyForwardElement.addEventListener("click", function () {
+    if (!historyForwardElement.classList.contains("disabled")) {
+      ipcRenderer.send("ytmView:goForward");
+    }
+  });
+
+  ipcRenderer.on("ytmView:navigationStateChanged", (event, state) => {
+    if (state.canGoBack) {
+      historyBackElement.classList.remove("disabled");
+    } else {
+      historyBackElement.classList.add("disabled");
+    }
+
+    if (state.canGoForward) {
+      historyForwardElement.classList.remove("disabled");
+    } else {
+      historyForwardElement.classList.add("disabled");
+    }
+  });
+
+  const pivotBar = document.querySelector("ytmusic-pivot-bar-renderer");
+  if (!pivotBar) {
+    // New YTM UI
+    const searchBar = document.querySelector("ytmusic-search-box");
+    const navBar = searchBar.parentNode;
+    navBar.insertBefore(historyForwardElement, searchBar);
+    navBar.insertBefore(historyBackElement, historyForwardElement);
+
+    // The search box takes over the whole nav bar when focused or when a
+    // search page is open — in those states the arrows would overlap the
+    // search input, so hide them until the search is closed
+    const style = document.createElement("style");
+    style.textContent = `
+      .ytmd-history-arrow-hidden {
+        display: none !important;
+      }
+      .ytmd-history-back, .ytmd-history-forward {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 34px;
+        height: 34px;
+        border-radius: 50%;
+        cursor: pointer;
+        opacity: 0.85;
+      }
+      .ytmd-history-back:hover, .ytmd-history-forward:hover {
+        background: rgba(255,255,255,0.1);
+      }
+      .ytmd-history-back.disabled, .ytmd-history-forward.disabled {
+        opacity: 0.3;
+        cursor: default;
+      }
+    `;
+    document.head.appendChild(style);
+
+    const updateArrowVisibility = () => {
+      const onSearchPage = location.pathname === "/results" || location.pathname === "/search" || location.pathname.startsWith("/search");
+      const searchActive = searchBar.matches(":focus-within");
+      const hide = onSearchPage || searchActive;
+      historyBackElement.classList.toggle("ytmd-history-arrow-hidden", hide);
+      historyForwardElement.classList.toggle("ytmd-history-arrow-hidden", hide);
+    };
+
+    document.addEventListener("focusin", event => {
+      if (searchBar.contains(event.target)) updateArrowVisibility();
+    });
+    document.addEventListener("focusout", event => {
+      if (searchBar.contains(event.target)) updateArrowVisibility();
+    });
+    // Re-evaluate when navigating to/from the search page
+    document.addEventListener("yt-navigate-finish", updateArrowVisibility);
+    // Fallback: re-evaluate periodically, in case navigation events don't fire
+    setInterval(updateArrowVisibility, 500);
+    // Initial state
+    setTimeout(updateArrowVisibility, 250);
+  } else {
+    historyForwardElement.classList.add("pivotbar");
+    historyBackElement.classList.add("pivotbar");
+    pivotBar.prepend(historyForwardElement);
+    pivotBar.prepend(historyBackElement);
+  }
 }
 
 async function createKeyboardNavigation() {
