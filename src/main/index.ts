@@ -1011,8 +1011,12 @@ function ytmViewNavigated() {
     const url = ytmView.webContents.getURL();
     if (url.startsWith("https://music.youtube.com/")) {
       lastUrl = url;
+      const url2 = new URL(url);
+      // On the home page there is nothing to navigate back to, so the back
+      // button reports as disabled there
+      const homepageDisable = url2.pathname === "/" && url2.search === "";
       const navigationState = {
-        canGoBack: ytmView.webContents.navigationHistory.canGoBack(),
+        canGoBack: !homepageDisable && ytmView.webContents.navigationHistory.canGoBack(),
         canGoForward: ytmView.webContents.navigationHistory.canGoForward()
       };
       ytmView.webContents.send("ytmView:navigationStateChanged", navigationState);
@@ -2072,6 +2076,11 @@ app.on("ready", async () => {
       if (event.sender !== mainWindow.webContents) return;
 
       if (ytmView.webContents.navigationHistory.canGoBack()) {
+        const currentUrl = new URL(ytmView.webContents.getURL());
+        if (currentUrl.hostname.endsWith("music.youtube.com") && currentUrl.pathname === "/" && currentUrl.search === "") {
+          // No-op on the home page
+          return;
+        }
         ytmView.webContents.navigationHistory.goBack();
       }
     }
