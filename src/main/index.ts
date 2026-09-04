@@ -182,6 +182,10 @@ let trayContextMenu = null;
 let lastUrl = "";
 let lastVideoId = "";
 let lastPlaylistId = "";
+// Only the very first load of the YTM view may restore where the user left off,
+// otherwise every user navigation (e.g. pressing the home button) would
+// re-trigger the continue-where-you-left-off restore and bounce back to the last played track.
+let ytmViewInitialLoad = true;
 
 let companionAuthWindowEnableTimeout: NodeJS.Timeout | null = null;
 let ytmViewLoadTimeout: NodeJS.Timeout | null = null;
@@ -1007,6 +1011,7 @@ function sendMainWindowStateIpc() {
 
 // Functions with call to ytmView renderer
 function ytmViewNavigated() {
+  ytmViewInitialLoad = false;
   if (ytmView !== null) {
     const url = ytmView.webContents.getURL();
     if (url.startsWith("https://music.youtube.com/")) {
@@ -1220,6 +1225,7 @@ const createYTMView = (): void => {
     store.set("state.lastUrl", lastUrl);
     store.set("state.lastVideoId", lastVideoId);
     store.set("state.lastPlaylistId", lastPlaylistId);
+    ytmViewInitialLoad = true;
     createYTMView();
   });
   ytmView.webContents.on("page-title-updated", (_event, title) => {
@@ -1321,10 +1327,20 @@ const createYTMView = (): void => {
 
   const continueWhereYouLeftOff: boolean = store.get("playback.continueWhereYouLeftOff");
   if (continueWhereYouLeftOff) {
-    const lastUrl: string = store.get("state.lastUrl");
-    if (lastUrl) {
-      if (lastUrl.startsWith("https://music.youtube.com/")) {
-        ytmView.webContents.loadURL(lastUrl);
+    const storedUrl: string = store.get("state.lastUrl");
+    if (storedUrl) {
+      if (storedUrl.startsWith("https://music.youtube.com/")) {
+        const storedVideoId: string = store.get("state.lastVideoId");
+        const storedPlaylistId: string = store.get("state.lastPlaylistId");
+        const resumeWatch = /^https:\/\/music\.youtube\.com\/watch\?\S+/;
+        // If a track was playing (e.g. in the mini player) but the page the user was on
+        // is not the watch page, open the watch page directly so playback resumes.
+        if (storedVideoId && storedVideoId !== "" && !resumeWatch.test(storedUrl)) {
+          const listParam = storedPlaylistId && storedPlaylistId.startsWith("RD") ? `&list=${storedPlaylistId}` : "";
+          ytmView.webContents.loadURL(`https://music.youtube.com/watch?v=${storedVideoId}${listParam}`);
+        } else {
+          ytmView.webContents.loadURL(storedUrl);
+        }
         navigateDefault = false;
       }
     }
@@ -1333,6 +1349,31 @@ const createYTMView = (): void => {
   if (navigateDefault) {
     ytmView.webContents.loadURL("https://music.youtube.com/");
     store.set("state.lastUrl", "https://music.youtube.com/");
+  }
+
+  // Auto-resume playback once after the initial load: the restored track may be
+  // loaded into the player bar but left paused (e.g. when the app was closed
+  // while playing in the mini player). Retried a few times because the player
+  // API may not be ready immediately. Runs only once, user navigation afterwards
+  // (e.g. pressing the home button) is never auto-played.
+  if (continueWhereYouLeftOff && !navigateDefault) {
+    let autoResumeDone = false;
+    const tryAutoResumePlay = () => {
+      ytmView.webContents
+        .executeJavaScript(
+          `(function() { const bar = document.querySelector("ytmusic-app-layout>ytmusic-player-bar"); if (bar && bar.playerApi && !bar.playing) { bar.playerApi.playVideo(); } })()`
+        )
+        .catch(() => {});
+    };
+    ytmView.webContents.once("did-finish-load", () => {
+      if (autoResumeDone) return;
+      autoResumeDone = true;
+      for (const delay of [3000, 6000, 10000]) {
+        setTimeout(() => {
+          if (ytmView && !ytmView.webContents.isDestroyed()) tryAutoResumePlay();
+        }, delay);
+      }
+    });
   }
 
   ytmViewLoadTimeout = setTimeout(() => {
@@ -2064,6 +2105,12 @@ app.on("ready", async () => {
     if (event.sender !== ytmView.webContents) return;
 
     return ytmViewIntegrationScripts;
+  });
+
+  ipcMain.handle("ytmView:isInitialLoad", event => {
+    if (!ytmView || event.sender !== ytmView.webContents) return false;
+
+    return ytmViewInitialLoad;
   });
 
   // Handle memory store ipc

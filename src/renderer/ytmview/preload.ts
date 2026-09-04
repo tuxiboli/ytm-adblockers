@@ -238,7 +238,12 @@ window.addEventListener("load", async () => {
   const state = await store.get("state");
   const continueWhereYouLeftOff = (await store.get("playback")).continueWhereYouLeftOff;
 
-  if (continueWhereYouLeftOff) {
+  // Restoring where the user left off must only happen on the very first load
+  // of the YTM view, otherwise user navigation (e.g. pressing the home button)
+  // would re-trigger it and bounce back to the last played track.
+  const isInitialLoad: boolean = await ipcRenderer.invoke("ytmView:isInitialLoad");
+
+  if (continueWhereYouLeftOff && isInitialLoad) {
     // The last page the user was on is already a page where it will be playing a song from (no point telling YTM to play it again)
     if (!state.lastUrl.startsWith("https://music.youtube.com/watch")) {
       if (state.lastVideoId) {
@@ -281,6 +286,19 @@ window.addEventListener("load", async () => {
         await webFrame.executeJavaScript(`
           (function() {
             window.ytmd.sendVideoData(document.querySelector("ytmusic-app-layout>ytmusic-player-bar").playerApi.getPlayerResponse().videoDetails, document.querySelector("ytmusic-app-layout>ytmusic-player-bar").playerApi.getPlaylistId());
+          })
+        `)
+      )();
+
+      // On the initial load of the watch page, make sure playback actually starts
+      // (the track may have been loaded into the player bar but left paused).
+      (
+        await webFrame.executeJavaScript(`
+          (function() {
+            const bar = document.querySelector("ytmusic-app-layout>ytmusic-player-bar");
+            if (bar && bar.playerApi && !bar.playing) {
+              bar.playerApi.playVideo();
+            }
           })
         `)
       )();
