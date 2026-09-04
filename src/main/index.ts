@@ -381,8 +381,6 @@ const store = new Conf<StoreSchema>({
       lastUrl: "https://music.youtube.com/",
       lastPlaylistId: "",
       lastVideoId: "",
-      navHistory: [],
-      navIndex: -1,
       windowBounds: null,
       windowMaximized: false,
       miniPlayerBounds: null
@@ -568,114 +566,10 @@ if (process.platform === "win32") {
   app.commandLine.appendSwitch("disable-features", "CalculateNativeWinOcclusion");
 }
 
-// Own navigation history stack — survives application restarts because it is
-// kept in the store. Back/forward buttons walk this stack by loading URLs,
-// independent from the webContents history which resets on restart.
-let navHistory: string[] = store.get("state.navHistory") ?? [];
-let navIndex = store.get("state.navIndex") ?? -1;
-
-const NAV_HISTORY_LIMIT = 50;
-// While the app itself restores a stack entry, tracking of new navigations is
-// paused so redirects do not branch/cut the persisted history
-let suppressNavTracking = false;
-
-function persistNavigation(): void {
-  store.set("state.navHistory", navHistory);
-  store.set("state.navIndex", navIndex);
-}
-
-function pushNavigation(url: string): void {
-  if (suppressNavTracking) return;
-  const parsed = new URL(url);
-  if (parsed.hostname !== "music.youtube.com") return;
-  if (navHistory[navIndex] === url) return;
-
-  // If navigating to the entry right after the current index, that is a forward move
-  if (navIndex + 1 < navHistory.length && navHistory[navIndex + 1] === url) {
-    navIndex++;
-    persistNavigation();
-    return;
-  }
-
-  // Otherwise push a new entry, dropping any "forward" entries
-  navHistory = [...navHistory.slice(0, navIndex + 1), url].slice(-NAV_HISTORY_LIMIT);
-  navIndex = navHistory.length - 1;
-  persistNavigation();
-}
-
-// Walk the webContents' own (in-page) history to the target URL without a full
-// page load. Falls back to loading the URL directly when the entry is not part
-// of the webContents history (e.g. right after a restart). Using the built-in
-// history keeps the player state intact and avoids re-triggering ads.
-function navigateToStackEntry(step: -1 | 1): void {
-  const target = navHistory[navIndex + step];
-  if (!target) return;
-
-  const nav = ytmView.webContents.navigationHistory;
-  let entryUrls: string[] = [];
-  try {
-    entryUrls = nav.getEntryURLs();
-  } catch {
-    entryUrls = [];
-  }
-
-  let currentIndex: number;
-  try {
-    currentIndex = nav.getActiveIndex();
-  } catch {
-    currentIndex = -1;
-  }
-
-  // Search for the target in the webContents history starting from the active index
-  let foundIndex = -1;
-  for (let i = currentIndex + step; i >= 0 && i < entryUrls.length; i += step) {
-    if (entryUrls[i] === target || entryUrls[i].split("#")[0] === target.split("#")[0]) {
-      foundIndex = i;
-      break;
-    }
-  }
-
-  suppressNavTracking = true;
-  navIndex += step;
-  persistNavigation();
-
-  if (foundIndex !== -1) {
-    // Walk the built-in history repeatedly until we reach the target entry
-    const steps = Math.abs(foundIndex - currentIndex);
-    let executed = 0;
-    const stepOnce = () => {
-      if (step === -1) {
-        if (ytmView !== null && ytmView.webContents.navigationHistory.canGoBack()) ytmView.webContents.navigationHistory.goBack();
-      } else {
-        if (ytmView !== null && ytmView.webContents.navigationHistory.canGoForward()) ytmView.webContents.navigationHistory.goForward();
-      }
-      executed++;
-      if (executed < steps) {
-        setTimeout(stepOnce, 150);
-      } else {
-        setTimeout(() => {
-          suppressNavTracking = false;
-          ytmViewNavigated();
-        }, 250);
-      }
-    };
-    stepOnce();
-  } else {
-    // Not in the webContents history (e.g. right after a restart) — load directly
-    ytmView.webContents.loadURL(target).finally(() => {
-      setTimeout(() => {
-        suppressNavTracking = false;
-      }, 1000);
-    });
-  }
-}
-
 function saveState() {
   store.set("state.lastUrl", lastUrl);
   store.set("state.lastVideoId", lastVideoId);
   store.set("state.lastPlaylistId", lastPlaylistId);
-  store.set("state.navHistory", navHistory);
-  store.set("state.navIndex", navIndex);
 }
 
 // Automatic background state saving every 5 minutes
@@ -1117,18 +1011,14 @@ function ytmViewNavigated() {
     const url = ytmView.webContents.getURL();
     if (url.startsWith("https://music.youtube.com/")) {
       lastUrl = url;
-      // Track the page in the own (store-persisted) navigation history
-      pushNavigation(url);
-      // Back/forward availability is based on the persisted stack so it also
-      // works right after an application restart, when the webContents history
-      // has been reset
+      const parsedUrl = new URL(url);
+      const onHome = parsedUrl.pathname === "/" && parsedUrl.search === "";
+      // The back button stays available outside the home page even when the
+      // webContents has no history (e.g. right after an application restart
+      // that resumed on a song) — in that case pressing it returns home
       const navigationState = {
-        // The back button should always be available outside of the home page:
-        // when there is no history entry to go back to (e.g. right after an
-        // application restart that resumed on a song), pressing it returns to
-        // the home page.
-        canGoBack: navIndex > 0 || !(new URL(url).pathname === "/" && new URL(url).search === ""),
-        canGoForward: navIndex < navHistory.length - 1
+        canGoBack: ytmView.webContents.navigationHistory.canGoBack() || !onHome,
+        canGoForward: ytmView.webContents.navigationHistory.canGoForward()
       };
       ytmView.webContents.send("ytmView:navigationStateChanged", navigationState);
       // Let the main window title bar keep its back/forward buttons in sync
@@ -2186,29 +2076,15 @@ app.on("ready", async () => {
     if (ytmView) {
       if (event.sender !== mainWindow.webContents) return;
 
-      if (navIndex > 0) {
-        navigateToStackEntry(-1);
+      if (ytmView.webContents.navigationHistory.canGoBack()) {
+        ytmView.webContents.navigationHistory.goBack();
       } else {
-        // No history behind (e.g. right after an application restart that
-        // resumed on a song) — go back to the home page instead, so "back"
-        // remains a way to return home
+        // No webContents history (e.g. right after an application restart that
+        // resumed on a song) — pressing back returns to the home page
         const currentUrl = new URL(ytmView.webContents.getURL());
         if (currentUrl.pathname === "/" && currentUrl.search === "") return;
-        suppressNavTracking = true;
-        ytmView.webContents.loadURL("https://music.youtube.com/").finally(() => {
-          setTimeout(() => {
-            suppressNavTracking = false;
-          }, 1000);
-        });
+        ytmView.webContents.loadURL("https://music.youtube.com/");
       }
-    }
-  });
-
-  ipcMain.on("ytmView:goForward", event => {
-    if (ytmView) {
-      if (event.sender !== mainWindow.webContents) return;
-
-      if (navIndex < navHistory.length - 1) navigateToStackEntry(1);
     }
   });
 
