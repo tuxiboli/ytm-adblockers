@@ -18,6 +18,7 @@ Download the latest release from the [Releases](https://github.com/elsenqedimli1
 
 # ✨ Features
 - 🎵 Listen to YouTube Music in a dedicated desktop application
+- 🪟 **Mini player** — compact always-on-top player window
 - 🛡️ **Built-in ad blocking** — updated URL filters
 - Continue where you left off
 - Custom CSS support
