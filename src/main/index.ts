@@ -575,6 +575,9 @@ let navHistory: string[] = store.get("state.navHistory") ?? [];
 let navIndex = store.get("state.navIndex") ?? -1;
 
 const NAV_HISTORY_LIMIT = 50;
+// While the app itself restores a stack entry, tracking of new navigations is
+// paused so redirects do not branch/cut the persisted history
+let suppressNavTracking = false;
 
 function persistNavigation(): void {
   store.set("state.navHistory", navHistory);
@@ -582,6 +585,7 @@ function persistNavigation(): void {
 }
 
 function pushNavigation(url: string): void {
+  if (suppressNavTracking) return;
   const parsed = new URL(url);
   if (parsed.hostname !== "music.youtube.com") return;
   if (navHistory[navIndex] === url) return;
@@ -597,6 +601,73 @@ function pushNavigation(url: string): void {
   navHistory = [...navHistory.slice(0, navIndex + 1), url].slice(-NAV_HISTORY_LIMIT);
   navIndex = navHistory.length - 1;
   persistNavigation();
+}
+
+// Walk the webContents' own (in-page) history to the target URL without a full
+// page load. Falls back to loading the URL directly when the entry is not part
+// of the webContents history (e.g. right after a restart). Using the built-in
+// history keeps the player state intact and avoids re-triggering ads.
+function navigateToStackEntry(step: -1 | 1): void {
+  const target = navHistory[navIndex + step];
+  if (!target) return;
+
+  const nav = ytmView.webContents.navigationHistory;
+  let entryUrls: string[] = [];
+  try {
+    entryUrls = nav.getEntryURLs();
+  } catch {
+    entryUrls = [];
+  }
+
+  let currentIndex: number;
+  try {
+    currentIndex = nav.getActiveIndex();
+  } catch {
+    currentIndex = -1;
+  }
+
+  // Search for the target in the webContents history starting from the active index
+  let foundIndex = -1;
+  for (let i = currentIndex + step; i >= 0 && i < entryUrls.length; i += step) {
+    if (entryUrls[i] === target || entryUrls[i].split("#")[0] === target.split("#")[0]) {
+      foundIndex = i;
+      break;
+    }
+  }
+
+  suppressNavTracking = true;
+  navIndex += step;
+  persistNavigation();
+
+  if (foundIndex !== -1) {
+    // Walk the built-in history repeatedly until we reach the target entry
+    const steps = Math.abs(foundIndex - currentIndex);
+    let executed = 0;
+    const stepOnce = () => {
+      if (step === -1) {
+        if (ytmView !== null && ytmView.webContents.navigationHistory.canGoBack()) ytmView.webContents.navigationHistory.goBack();
+      } else {
+        if (ytmView !== null && ytmView.webContents.navigationHistory.canGoForward()) ytmView.webContents.navigationHistory.goForward();
+      }
+      executed++;
+      if (executed < steps) {
+        setTimeout(stepOnce, 150);
+      } else {
+        setTimeout(() => {
+          suppressNavTracking = false;
+          ytmViewNavigated();
+        }, 250);
+      }
+    };
+    stepOnce();
+  } else {
+    // Not in the webContents history (e.g. right after a restart) — load directly
+    ytmView.webContents.loadURL(target).finally(() => {
+      setTimeout(() => {
+        suppressNavTracking = false;
+      }, 1000);
+    });
+  }
 }
 
 function saveState() {
@@ -2111,17 +2182,7 @@ app.on("ready", async () => {
     if (ytmView) {
       if (event.sender !== mainWindow.webContents) return;
 
-      if (navIndex > 0) {
-        if (navHistory[navIndex - 1] === ytmView.webContents.getURL()) {
-          // The previous stack entry is the webContents' own previous entry —
-          // use the built-in history so in-page state stays intact
-          ytmView.webContents.navigationHistory.goBack();
-        } else {
-          navIndex--;
-          persistNavigation();
-          ytmView.webContents.loadURL(navHistory[navIndex]);
-        }
-      }
+      if (navIndex > 0) navigateToStackEntry(-1);
     }
   });
 
@@ -2129,15 +2190,7 @@ app.on("ready", async () => {
     if (ytmView) {
       if (event.sender !== mainWindow.webContents) return;
 
-      if (navIndex < navHistory.length - 1) {
-        if (navHistory[navIndex + 1] === ytmView.webContents.getURL()) {
-          ytmView.webContents.navigationHistory.goForward();
-        } else {
-          navIndex++;
-          persistNavigation();
-          ytmView.webContents.loadURL(navHistory[navIndex]);
-        }
-      }
+      if (navIndex < navHistory.length - 1) navigateToStackEntry(1);
     }
   });
 
