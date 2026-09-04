@@ -1012,6 +1012,7 @@ function ytmViewNavigated() {
     if (url.startsWith("https://music.youtube.com/")) {
       lastUrl = url;
       const url2 = new URL(url);
+      const url2 = new URL(url);
       // On the home page there is nothing to navigate back to, so the back
       // button reports as disabled there.
       // Everywhere else the back button is always active: if there is no
