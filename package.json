@@ -1,7 +1,7 @@
 {
   "name": "ytm-adblockers",
   "productName": "YTM Adblockers",
-  "version": "2.0.11",
+  "version": "2.0.12",
   "description": "YTM Adblockers",
   "main": ".vite/main/index.js",
   "private": true,
