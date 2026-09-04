@@ -1012,11 +1012,15 @@ function ytmViewNavigated() {
     if (url.startsWith("https://music.youtube.com/")) {
       lastUrl = url;
       const url2 = new URL(url);
+      const url2 = new URL(url);
       // On the home page there is nothing to navigate back to, so the back
-      // button reports as disabled there
-      const homepageDisable = url2.pathname === "/" && url2.search === "";
+      // button reports as disabled there.
+      // Everywhere else the back button is always active: if there is no
+      // history to go back to (e.g. right after app restart resumed on a song),
+      // pressing it navigates back to the home page instead.
+      const onHome = url2.pathname === "/" && url2.search === "";
       const navigationState = {
-        canGoBack: !homepageDisable && ytmView.webContents.navigationHistory.canGoBack(),
+        canGoBack: !onHome,
         canGoForward: ytmView.webContents.navigationHistory.canGoForward()
       };
       ytmView.webContents.send("ytmView:navigationStateChanged", navigationState);
@@ -2075,13 +2079,18 @@ app.on("ready", async () => {
     if (ytmView) {
       if (event.sender !== mainWindow.webContents) return;
 
+      const currentUrl = new URL(ytmView.webContents.getURL());
+      const onHome = currentUrl.hostname.endsWith("music.youtube.com") && currentUrl.pathname === "/" && currentUrl.search === "";
+      if (onHome) {
+        // Nothing to go back to on the home page
+        return;
+      }
       if (ytmView.webContents.navigationHistory.canGoBack()) {
-        const currentUrl = new URL(ytmView.webContents.getURL());
-        if (currentUrl.hostname.endsWith("music.youtube.com") && currentUrl.pathname === "/" && currentUrl.search === "") {
-          // No-op on the home page
-          return;
-        }
         ytmView.webContents.navigationHistory.goBack();
+      } else {
+        // No history to go back to (e.g. right after an app restart that
+        // resumed on a song) — navigate back to the home page instead
+        ytmView.webContents.loadURL("https://music.youtube.com/");
       }
     }
   });
