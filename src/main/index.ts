@@ -2020,6 +2020,18 @@ app.on("ready", async () => {
     if (ytmView) {
       if (event.sender !== mainWindow.webContents) return;
 
+      // If we are already on the YouTube Music home page, do not reload it.
+      // Reloading while already on the home page can cause the webapp to
+      // redirect back to the last-opened track / play page.
+      try {
+        const currentUrl = new URL(ytmView.webContents.getURL());
+        if (currentUrl.hostname === "music.youtube.com" && (currentUrl.pathname === "/" || currentUrl.pathname === "")) {
+          return;
+        }
+      } catch {
+        // Malformed URL, fall through and navigate as usual.
+      }
+
       ytmView.webContents.loadURL("https://music.youtube.com/");
     }
   });
