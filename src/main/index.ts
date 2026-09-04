@@ -2076,13 +2076,16 @@ app.on("ready", async () => {
     if (ytmView) {
       if (event.sender !== mainWindow.webContents) return;
 
+      const currentUrl = new URL(ytmView.webContents.getURL());
+      const onHome = currentUrl.hostname.endsWith("music.youtube.com") && currentUrl.pathname === "/" && currentUrl.search === "";
+      // The back button does nothing while on the home page
+      if (onHome) return;
+
       if (ytmView.webContents.navigationHistory.canGoBack()) {
         ytmView.webContents.navigationHistory.goBack();
       } else {
         // No webContents history (e.g. right after an application restart that
         // resumed on a song) — pressing back returns to the home page
-        const currentUrl = new URL(ytmView.webContents.getURL());
-        if (currentUrl.pathname === "/" && currentUrl.search === "") return;
         ytmView.webContents.loadURL("https://music.youtube.com/");
       }
     }
