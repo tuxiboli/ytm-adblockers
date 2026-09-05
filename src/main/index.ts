@@ -2141,12 +2141,6 @@ app.on("ready", async () => {
       // Prefer the built-in history: it navigates without a full reload (no ads).
       // Fall back to the persisted stack after a restart (empty built-in history).
       if (navIndex > 0) {
-        // Stop playback entirely when going back (user request: back button turns the music off)
-        ytmView.webContents
-          .executeJavaScript(
-            `(function() { const bar = document.querySelector("ytmusic-app-layout>ytmusic-player-bar"); if (bar && bar.playerApi) { bar.playerApi.stopVideo(); } })()`
-          )
-          .catch(() => {});
         navIndex--;
         navRestoreMode = "back";
         if (ytmView.webContents.navigationHistory.canGoBack()) {
