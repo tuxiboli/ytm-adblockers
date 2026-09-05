@@ -186,6 +186,16 @@ let lastPlaylistId = "";
 // otherwise every user navigation (e.g. pressing the home button) would
 // re-trigger the continue-where-you-left-off restore and bounce back to the last played track.
 let ytmViewInitialLoad = true;
+// Persisted navigation stack so back/forward keep working across app restarts
+let navHistory: string[] = [];
+let navIndex = -1;
+// Set while navigating to an entry of the persisted stack via loadURL, so that
+// the resulting navigation is not pushed onto the stack again
+let navRestoreMode = "";
+// While inside the suppress window after a back/forward restore, extra page
+// navigations (redirects / SPA in-page events) are NOT recorded as new entries,
+// so they can't truncate the forward history and break the forward button
+let navSuppressUntil = 0;
 
 let companionAuthWindowEnableTimeout: NodeJS.Timeout | null = null;
 let ytmViewLoadTimeout: NodeJS.Timeout | null = null;
@@ -574,6 +584,8 @@ function saveState() {
   store.set("state.lastUrl", lastUrl);
   store.set("state.lastVideoId", lastVideoId);
   store.set("state.lastPlaylistId", lastPlaylistId);
+  store.set("state.navHistory", navHistory);
+  store.set("state.navIndex", navIndex);
 }
 
 // Automatic background state saving every 5 minutes
@@ -1016,13 +1028,44 @@ function ytmViewNavigated() {
     const url = ytmView.webContents.getURL();
     if (url.startsWith("https://music.youtube.com/")) {
       lastUrl = url;
+      // Maintain the persisted navigation stack
+      if (navRestoreMode !== "") {
+        // Navigation came from our own back/forward; keep the stack in sync by
+        // overwriting the entry we moved to with the URL that actually loaded
+        if (navIndex >= 0 && navIndex < navHistory.length) {
+          if (navHistory[navIndex] !== url) {
+            navHistory[navIndex] = url;
+          }
+        }
+        navRestoreMode = "";
+        navSuppressUntil = Date.now() + 2000;
+      } else if (Date.now() < navSuppressUntil) {
+        // Extra navigation right after a restore (redirect / SPA in-page):
+        // just keep the current entry in sync, don't truncate/push
+        if (navIndex >= 0 && navIndex < navHistory.length) {
+          navHistory[navIndex] = url;
+        }
+      } else {
+        if (navIndex < navHistory.length - 1) {
+          navHistory = navHistory.slice(0, navIndex + 1);
+        }
+        if (navHistory[navIndex] !== url) {
+          navHistory.push(url);
+          if (navHistory.length > 50) {
+            navHistory = navHistory.slice(navHistory.length - 50);
+          }
+          navIndex = navHistory.length - 1;
+        }
+      }
       const parsedUrl = new URL(url);
       const onHome = parsedUrl.pathname === "/" && parsedUrl.search === "";
       // While on the home page the back button must not work (nothing behind),
       // but the forward button keeps working when history exists ahead
+      const navCanGoBack = !onHome && navIndex > 0;
+      const navCanGoForward = navIndex >= 0 && navIndex < navHistory.length - 1;
       const navigationState = {
-        canGoBack: !onHome && ytmView.webContents.navigationHistory.canGoBack(),
-        canGoForward: ytmView.webContents.navigationHistory.canGoForward()
+        canGoBack: navCanGoBack,
+        canGoForward: navCanGoForward
       };
       ytmView.webContents.send("ytmView:navigationStateChanged", navigationState);
       // Let the main window title bar keep its back/forward buttons in sync
@@ -1325,6 +1368,18 @@ const createYTMView = (): void => {
 
   let navigateDefault = true;
 
+  // Restore the persisted navigation stack so back/forward work after restarts
+  const persistedNavHistory: unknown = store.get("state.navHistory");
+  if (Array.isArray(persistedNavHistory)) {
+    navHistory = persistedNavHistory.filter((entry): entry is string => typeof entry === "string" && entry.startsWith("https://music.youtube.com/"));
+    const persistedNavIndex: unknown = store.get("state.navIndex");
+    if (typeof persistedNavIndex === "number" && persistedNavIndex >= 0 && persistedNavIndex < navHistory.length) {
+      navIndex = persistedNavIndex;
+    } else {
+      navIndex = navHistory.length - 1;
+    }
+  }
+
   const continueWhereYouLeftOff: boolean = store.get("playback.continueWhereYouLeftOff");
   if (continueWhereYouLeftOff) {
     const storedUrl: string = store.get("state.lastUrl");
@@ -1357,7 +1412,8 @@ const createYTMView = (): void => {
   // API may not be ready immediately. Runs only once, user navigation afterwards
   // (e.g. pressing the home button) is never auto-played.
   if (continueWhereYouLeftOff && !navigateDefault) {
-    let autoResumeDone = false;
+    let cancelled = false;
+    let sawPlaying = false;
     const tryAutoResumePlay = () => {
       ytmView.webContents
         .executeJavaScript(
@@ -1365,14 +1421,27 @@ const createYTMView = (): void => {
         )
         .catch(() => {});
     };
-    ytmView.webContents.once("did-finish-load", () => {
-      if (autoResumeDone) return;
-      autoResumeDone = true;
-      for (const delay of [3000, 6000, 10000]) {
-        setTimeout(() => {
-          if (ytmView && !ytmView.webContents.isDestroyed()) tryAutoResumePlay();
-        }, delay);
+    // If the user manually pauses after playback has started, cancel the
+    // remaining pending attempts so the song is not force-started again
+    const onCancelWatcher = (state: PlayerState) => {
+      if (state.trackState === VideoState.Playing || state.trackState === VideoState.Buffering) {
+        sawPlaying = true;
+      } else if (sawPlaying && state.trackState === VideoState.Paused) {
+        cancelled = true;
+        playerStateStore.removeEventListener(onCancelWatcher);
       }
+    };
+    playerStateStore.addEventListener(onCancelWatcher);
+    ytmView.webContents.once("did-finish-load", () => {
+      // Single attempt only: repeated retries would force-start the track after
+      // the user has manually paused it
+      const timer = setTimeout(() => {
+        if (cancelled) {
+          clearTimeout(timer);
+          return;
+        }
+        if (ytmView && !ytmView.webContents.isDestroyed()) tryAutoResumePlay();
+      }, 3000);
     });
   }
 
@@ -2069,9 +2138,22 @@ app.on("ready", async () => {
     if (ytmView) {
       if (event.sender !== mainWindow.webContents) return;
 
-      // Back only works when there is real history to go back to — no home fallback
-      if (ytmView.webContents.navigationHistory.canGoBack()) {
-        ytmView.webContents.navigationHistory.goBack();
+      // Prefer the built-in history: it navigates without a full reload (no ads).
+      // Fall back to the persisted stack after a restart (empty built-in history).
+      if (navIndex > 0) {
+        // Stop playback entirely when going back (user request: back button turns the music off)
+        ytmView.webContents
+          .executeJavaScript(
+            `(function() { const bar = document.querySelector("ytmusic-app-layout>ytmusic-player-bar"); if (bar && bar.playerApi) { bar.playerApi.stopVideo(); } })()`
+          )
+          .catch(() => {});
+        navIndex--;
+        navRestoreMode = "back";
+        if (ytmView.webContents.navigationHistory.canGoBack()) {
+          ytmView.webContents.navigationHistory.goBack();
+        } else {
+          ytmView.webContents.loadURL(navHistory[navIndex]);
+        }
       }
     }
   });
@@ -2080,8 +2162,14 @@ app.on("ready", async () => {
     if (ytmView) {
       if (event.sender !== mainWindow.webContents) return;
 
-      if (ytmView.webContents.navigationHistory.canGoForward()) {
-        ytmView.webContents.navigationHistory.goForward();
+      if (navIndex >= 0 && navIndex < navHistory.length - 1) {
+        navIndex++;
+        navRestoreMode = "forward";
+        if (ytmView.webContents.navigationHistory.canGoForward()) {
+          ytmView.webContents.navigationHistory.goForward();
+        } else {
+          ytmView.webContents.loadURL(navHistory[navIndex]);
+        }
       }
     }
   });
