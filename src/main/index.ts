@@ -1417,7 +1417,7 @@ const createYTMView = (): void => {
     const tryAutoResumePlay = () => {
       ytmView.webContents
         .executeJavaScript(
-          `(function() { const bar = document.querySelector("ytmusic-app-layout>ytmusic-player-bar"); if (bar && bar.playerApi && !bar.playing) { bar.playerApi.playVideo(); } })()`
+          `(function() { const bar = document.querySelector("ytmusic-app-layout>ytmusic-player-bar"); const playerApi = window.__YTMD_HOOK__?.ytmPlayerBar?.playerApi; if (bar && playerApi && !bar.playing) { playerApi.playVideo(); } })()`
         )
         .catch(() => {});
     };
