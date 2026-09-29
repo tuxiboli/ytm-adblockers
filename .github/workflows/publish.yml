@@ -1,6 +1,9 @@
 ---
 name: Application Publish
 
+permissions:
+  contents: write
+
 on:
   push:
     tags:
