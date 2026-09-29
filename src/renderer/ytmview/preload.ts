@@ -130,8 +130,11 @@ async function hookPlayerApiEvents() {
 }
 
 function overrideHistoryButtonDisplay() {
+  const historyButton = document.querySelector<HTMLElement>("#history-link .history-button");
+  if (!historyButton) return;
+
   // @ts-expect-error Style is reported as readonly but this still works
-  document.querySelector<HTMLElement>("#history-link .history-button").style = "display: inline-block !important;";
+  historyButton.style = "display: inline-block !important;";
 }
 
 function getYTMTextRun(runs: { text: string }[]) {
@@ -152,7 +155,7 @@ function getYTMTextRun(runs: { text: string }[]) {
       let fakeBaseClass = function() {
         try {
           if (window.__YTMD_HOOK__) {
-            if (this.hostElement && this.hostElement.nodeName === "YTMUSIC-PLAYER-BAR") {
+            if (this.hostElement && this.hostElement.nodeName === "YTMUSIC-APP-LAYOUT") {
               window.__YTMD_HOOK__.ytmPlayerBar = this
             }
 
@@ -263,12 +266,12 @@ window.addEventListener("load", async () => {
               )();
               heightTransitionCount++;
               if (heightTransitionCount >= 2) {
-                document.querySelector("ytmusic-app-layout>ytmusic-player-bar").removeEventListener("transitionend", transitionEnd);
+                document.querySelector("ytmusic-app-layout>ytmusic-player-bar")?.removeEventListener("transitionend", transitionEnd);
               }
             }
           }
         };
-        document.querySelector("ytmusic-app-layout>ytmusic-player-bar").addEventListener("transitionend", transitionEnd);
+        document.querySelector("ytmusic-app-layout>ytmusic-player-bar")?.addEventListener("transitionend", transitionEnd);
 
         document.dispatchEvent(
           new CustomEvent("yt-navigate", {
@@ -314,7 +317,7 @@ window.addEventListener("load", async () => {
 
   const alwaysShowVolumeSlider = (await store.get("appearance")).alwaysShowVolumeSlider;
   if (alwaysShowVolumeSlider) {
-    document.querySelector("ytmusic-app-layout>ytmusic-player-bar #volume-slider").classList.add("ytmd-persist-volume-slider");
+    document.querySelector("ytmusic-app-layout>ytmusic-player-bar #volume-slider")?.classList.add("ytmd-persist-volume-slider");
   }
 
   ipcRenderer.on("remoteControl:execute", async (_event, command, value) => {
@@ -579,16 +582,15 @@ window.addEventListener("load", async () => {
   });
 
   store.onDidAnyChange(newState => {
+    const volumeSlider = document.querySelector("#volume-slider");
+    if (!volumeSlider) return;
+
     if (newState.appearance.alwaysShowVolumeSlider) {
-      const volumeSlider = document.querySelector("#volume-slider");
       if (!volumeSlider.classList.contains("ytmd-persist-volume-slider")) {
         volumeSlider.classList.add("ytmd-persist-volume-slider");
       }
-    } else {
-      const volumeSlider = document.querySelector("#volume-slider");
-      if (volumeSlider.classList.contains("ytmd-persist-volume-slider")) {
-        volumeSlider.classList.remove("ytmd-persist-volume-slider");
-      }
+    } else if (volumeSlider.classList.contains("ytmd-persist-volume-slider")) {
+      volumeSlider.classList.remove("ytmd-persist-volume-slider");
     }
   });
 

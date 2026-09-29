@@ -7,6 +7,11 @@
   }
 
   const ytmStore = window.__YTMD_HOOK__.ytmStore;
+  const playerBar = document.querySelector("ytmusic-app-layout>ytmusic-player-bar");
+
+  // The redesigned YTM player can expose the Player API without rendering the legacy player-bar element.
+  // These custom controls depend on that element, so skip them when it is not available instead of aborting preload initialization.
+  if (!playerBar) return;
 
   let ytmdControlButtons = {};
 
@@ -69,10 +74,9 @@
     iconName: "yt-sys-icons:library_add",
     data: libraryButtonData
   };
-  document
-    .querySelector("ytmusic-app-layout>ytmusic-player-bar")
-    .querySelector("ytmusic-like-button-renderer")
-    .insertAdjacentElement("afterend", libraryButton);
+  const likeButton = playerBar.querySelector("ytmusic-like-button-renderer");
+  if (!likeButton) return;
+  likeButton.insertAdjacentElement("afterend", libraryButton);
 
   let playlistButton = document.createElement("yt-button-shape");
   playlistButton.classList.add("ytmd-player-bar-control");
@@ -161,7 +165,8 @@
     }
   });
 
-  let rightControls = document.querySelector("ytmusic-app-layout>ytmusic-player-bar").querySelector(".right-controls-buttons");
+  let rightControls = playerBar.querySelector(".right-controls-buttons");
+  if (!rightControls) return;
   let sleepTimerButton = document.createElement("yt-icon-button");
 
   let sleepTimerIcon = document.createElement("yt-icon");
